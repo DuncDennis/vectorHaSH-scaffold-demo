@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grid-Cell ⇄ Hippocampus Scaffold Visualizer (λ = 2, 3, 5)</title>
+
+    <!-- ============ STYLES (unified instant tool-tips + darker zero-colour) ============ -->
+    <style>
+        :root {
+            --cell: 20px;
+            --hex: 20px;
+            /* tweak this to darken/lighten the zero-activation shade (0 = saturated, 1 = white) */
+            --zero-lighten: 0.65;
+        }
+
+        /* ---------- Layout / typography (unchanged) ---------- */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 1.25rem;
+            background: #fafafa;
+            color: #222;
+            line-height: 1.45;
+        }
+
+        h1 {
+            margin: .2rem 0 1rem;
+            font-size: 1.65rem;
+        }
+
+        h2 {
+            margin: .4rem 0 .7rem;
+            font-size: 1.35rem;
+        }
+
+        section {
+            margin-top: 2.4rem;
+        }
+
+        .gridLayout {
+            display: grid;
+            gap: 1.7rem;
+            grid-template-columns: 1fr 380px;
+        }
+
+        @media(max-width:900px) {
+            .gridLayout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        #superWrapper {
+            position: relative;
+            width: calc(30*var(--cell));
+            height: calc(30*var(--cell));
+            border: 1px solid #bbb;
+            background: #fff;
+            overflow: visible;
+        }
+
+        #superLattice {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* highlight colour for the SVG hex that is currently selected */
+        .superHex[data-active="1"] {
+            fill: #d8c7ff;
+            /* Medium-light purple fill */
+            stroke: #9370db;
+            /* Purple stroke */
+        }
+
+
+        .overlay {
+            position: absolute;
+            left: -2px;
+            top: -2px;
+            border: 2px solid red;
+            pointer-events: none;
+            box-sizing: content-box;
+        }
+
+        .module {
+            margin-bottom: 2.2rem;
+        }
+
+        .moduleTitle {
+            margin: .1rem 0 .45rem;
+            font-weight: 600;
+        }
+
+        .moduleBody {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.2rem;
+            align-items: flex-start;
+        }
+
+        .hexSVG {
+            display: block;
+            background: #fafcff;
+            border: 1px solid #ddd;
+            overflow: visible;
+        }
+
+        .oneHot {
+            display: grid;
+            gap: 2px;
+        }
+
+        .oneHot div {
+            width: 18px;
+            height: 18px;
+            background: #e0e0e0;
+        }
+
+        .gVector {
+            display: flex;
+            gap: 2px;
+            overflow: visible;
+            padding-bottom: .4rem;
+            border-bottom: 1px dashed #ccc;
+            margin-bottom: 1.4rem;
+        }
+
+        .gVector .cell {
+            position: relative;
+        }
+
+        /* anchor for tooltip */
+
+        .gVector .cell,
+        #gNoisyVec .cell,
+        #gCANVec .cell {
+            width: 18px;
+            height: 18px;
+            flex: 0 0 auto;
+            background: #e0e0e0;
+        }
+
+        .gLabel,
+        .hLabel {
+            margin: .2rem 0 .6rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        #gCleanWrap {
+            grid-column: 1/-1;
+            margin-top: 2rem;
+            position: relative;
+        }
+
+        .hGrid {
+            display: grid;
+            gap: 2px;
+            justify-content: start;
+            margin-bottom: 1.4rem;
+        }
+
+        .hGrid .hcell {
+            width: 18px;
+            height: 18px;
+            background: #d0d0d0;
+        }
+
+        .controls {
+            margin-bottom: .8rem;
+            font-size: .95rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: .6rem;
+            align-items: center;
+        }
+
+        .controls input[type="number"] {
+            width: 60px;
+            padding: 4px 6px;
+            border: 1px solid #ccc;
+            font-size: .9rem;
+            border-radius: 4px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #1e88e5;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: .8rem;
+            user-select: none;
+        }
+
+        .button:hover {
+            background: #1565c0;
+        }
+
+        .explain {
+            font-size: .9rem;
+            margin: -.5rem 0 1.1rem;
+            color: #555;
+        }
+
+        #connSvg {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+            /* Add this line to put it above other elements */
+        }
+
+        #matWrap,
+        #matWrapWgh {
+            border: 1px solid #ccc;
+            padding: 1rem;
+            background: #fff;
+            border-radius: 6px;
+            margin-top: 1.4rem;
+        }
+
+        #matGrid,
+        #matGridWgh {
+            display: grid;
+            gap: 2px;
+            justify-content: start;
+        }
+
+        #matGrid .mcell,
+        #matGridWgh .mcell {
+            width: 12px;
+            height: 12px;
+            background: #e0e0e0;
+        }
+
+        /* ----------------- INSTANT TOOL-TIPS (JS → CSS var) ----------------- */
+        .cell,
+        .hcell,
+        .mcell {
+            position: relative;
+        }
+
+        .cell:hover::after,
+        .hcell:hover::after,
+        .mcell:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            top: -26px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, .75);
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .fieldMaps {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        @media(max-width:1000px) {
+            .fieldMaps {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        #gridCellField,
+        #hippoCellField {
+            max-width: 100%;
+            overflow: hidden;
+        }
+    </style>
+
+    <!-- favicon -->
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 72'><text y='.9em' font-size='60'>🧠</text></svg>" />
+</head>
+
+<body>
+    <h1>Grid-Cell ⇄ Hippocampus Scaffold Visualizer</h1>
+    <p class="explain">
+        Explore how modular grid-cell codes map to hippocampal states, how noise is corrected by the
+        bi-directional scaffold, and how the winner-takes-all dynamics restores a clean memory.
+    </p>
+
+    <!-- ---------- SECTION A ---------- -->
+    <section id="secA">
+        <h2>Section A - Grid Cell Modules</h2>
+        <p class="explain">
+            Pick a lattice point to see which grid cells fire.<br />
+            The total number of distinct grid-state patterns is
+            <em>N<sub>patts</sub> = &prod;<sub>M</sub> λ<sub>M</sub><sup>2</sup> = 4 x 9 x 25 = 900</em>.<br />
+            The total number of grid-cells is only
+            <em>N<sub>g</sub> = &sum;<sub>M</sub> λ<sub>m</sub><sup>2</sup> = 4 + 9 + 25 = 38</em>.
+        </p>
+
+        <div class="controls" id="coordControls">
+            (x,y)=
+            <input id="xInput" type="number" min="0" max="29" value="0" step="1" />
+            <input id="yInput" type="number" min="0" max="29" value="0" step="1" />
+            <span class="button" id="randBtn">Random</span>
+        </div>
+
+        <div class="gridLayout">
+            <div id="superWrapper">
+                <div id="superLattice"></div>
+            </div>
+            <aside id="modules"></aside>
+        </div>
+
+        <div id="gCleanWrap">
+            <h3 class="gLabel">Grid state <span id="gLabelText"></span></h3>
+            <div class="gVector" id="gVector"></div>
+        </div>
+    </section>
+
+    <!-- ---------- SECTION B ---------- -->
+    <section id="secB">
+        <h2>Section B - Grid → Hippocampus Projection</h2>
+        <p class="explain">
+            Grid activity projects through a sparse Gaussian matrix
+            <em>W<sub>hg</sub></em>.<br />
+            The resulting hippocampal activation for grid-position <em>x</em> is computed as
+            <em>h<sub>x</sub> = ReLU[ W<sub>hg</sub> g<sub>x</sub> - θ ]</em>. <br />
+            (Useful in Section C: the return projection is a Hebbian matrix
+            <em>W<sub>gh</sub></em>.)
+        </p>
+
+        <div class="controls" id="projControls">
+            θ =
+            <input id="thetaInput" type="number" value="0.5" step="0.5" min="0" />
+            γ =
+            <input id="gammaInput" type="number" value="0.6" step="0.05" min="0.01" max="1" />
+            <span class="param-label">N<sub>H</sub> =</span>
+            <select id="hSizeSelect">
+                <option value="16">16</option>
+                <option value="64" selected>64</option>
+                <option value="100">100</option>
+                <option value="256">256</option>
+            </select>
+            <span class="button" id="regenBtn">Regenerate W<sub>hg</sub></span>
+            <label style="display:inline-flex;align-items:center;gap:.25rem">
+                <input type="checkbox" id="whgToggle" /> draw <em>W<sub>hg</sub></em>
+            </label>
+        </div>
+
+        <div id="hWrap"></div>
+
+        <details id="matWrap">
+            <summary>Show / hide W<sub>hg</sub></summary>
+            <div id="matGrid"></div>
+        </details>
+    </section>
+
+    <!-- ---------- SECTION C ---------- -->
+    <section id="secC">
+        <h2>Section C - Noisy Fixed-Point Recovery</h2>
+        <p class="explain">
+            Add Gaussian noise, project back with Hebbian <em>W<sub>gh</sub></em>,
+            apply winner-takes-all per module, then re-project with <em>W<sub>hg</sub></em>.<br />
+            In equations, the grid state update step is
+            <em>g(t&nbsp;+&nbsp;1) = CAN[ W<sub>gh</sub> h(t) ]</em>,
+            where <em>CAN</em> denotes the Winner-Takes-All dynamics.
+        </p>
+
+        <div class="controls" id="noiseControls">
+            σ =
+            <input id="noiseInput" type="number" value="0.3" step="0.1" min="0" />
+            <span class="button" id="noiseBtn">Add noise &amp; recover</span>
+            <label style="display:inline-flex;align-items:center;gap:.25rem">
+                <input type="checkbox" id="wghToggle" /> draw <em>W<sub>gh</sub></em>
+            </label>
+        </div>
+
+        <div id="noisySection"></div>
+        <p id="reconStatus" style="font-size:1.1rem;margin-top:.6rem;"></p>
+
+        <details id="matWrapWgh">
+            <summary>Show / hide W<sub>gh</sub></summary>
+            <p class="explain" style="margin-top:0.8rem;">
+                <em>W<sub>gh</sub> = (1 / N<sub>h</sub>) &sum;<sub>x</sub> g<sub>x</sub> h<sub>x</sub><sup>T</sup></em>
+            </p>
+            <div id="matGridWgh"></div>
+        </details>
+    </section>
+    <!-- SVG for connection lines -->
+    <svg id="connSvg"></svg>
+    <!-- Add this after Section C -->
+    <!-- Replace the existing Section D with this improved version -->
+    <section id="secD">
+        <h2>Section D - Spatial Firing Fields</h2>
+        <p class="explain">
+            Visualize how individual cells' activity varies across the entire environment.
+        </p>
+
+        <!-- Grid cell fields section -->
+        <div>
+            <h3 class="gLabel">Grid Cell Firing Fields</h3>
+            <div class="controls">
+                Module:
+                <select id="moduleSelect">
+                    <option value="0">Module λ = 2</option>
+                    <option value="1">Module λ = 3</option>
+                    <option value="2">Module λ = 5</option>
+                </select>
+                Grid Cell:
+                <select id="gridCellSelect"></select>
+                <span class="button" id="computeGridFieldBtn">Compute Grid Field</span>
+            </div>
+            <div id="gridCellField" style="margin-top: 15px;"></div>
+        </div>
+
+        <!-- Hippocampal cell fields section -->
+        <div style="margin-top: 30px;">
+            <h3 class="hLabel">Hippocampal Cell Place Fields</h3>
+            <div class="controls">
+                Hippocampal Cell:
+                <select id="hippoCellSelect"></select>
+                <span class="button" id="computePlaceFieldBtn">Compute Place Field</span>
+            </div>
+            <div id="hippoCellField" style="margin-top: 15px;"></div>
+        </div>
+    </section>
+
+    <!-- ============ SCRIPT ============ -->
+    <script>
+        /* =========================================================
+           Parameters & colours
+        =========================================================*/
+        const reconStatus = document.getElementById("reconStatus");
+        const periods = [2, 3, 5],
+            colours = ["#e57373", "#64b5f6", "#81c784"];
+        const HPC_COLOR = "#ffa500";
+        const HPC_NEG_COLOR = "#40e0d0";   // turquoise for negative activations
+
+        const ZERO_LIGHTEN = parseFloat(getComputedStyle(document.documentElement)
+            .getPropertyValue("--zero-lighten")) || 0.65;
+
+        const cellPx = parseInt(getComputedStyle(document.documentElement)
+            .getPropertyValue("--cell"));
+        const hexSize = parseInt(getComputedStyle(document.documentElement)
+            .getPropertyValue("--hex"));
+        const superSize = periods.reduce((a, b) => a * b, 1); // 30
+
+        /* DOM refs */
+        const $superGrid = document.getElementById("superLattice"),
+            $superWrapper = document.getElementById("superWrapper"),
+            $mods = document.getElementById("modules");
+
+        const $xIn = document.getElementById("xInput"),
+            $yIn = document.getElementById("yInput"),
+            $thetaIn = document.getElementById("thetaInput"),
+            $gammaIn = document.getElementById("gammaInput"),
+            $noiseIn = document.getElementById("noiseInput"),
+            $hSel = document.getElementById("hSizeSelect");
+
+        const $connSvg = document.getElementById("connSvg"),
+            $matGrid = document.getElementById("matGrid"),
+            $matGridWgh = document.getElementById("matGridWgh");
+
+        let showWhg = false, showWgh = false;
+
+        // With these modified versions:
+        document.getElementById("whgToggle")
+            .addEventListener("change", e => {
+                showWhg = e.target.checked;
+                clearLines();
+                if (showWhg) drawLines(hCells, gCells, W_hg);
+                if (showWgh) drawLines(hNoisyCells, gNoisyCells, W_gh_rows);
+            });
+
+        document.getElementById("wghToggle")
+            .addEventListener("change", e => {
+                showWgh = e.target.checked;
+                clearLines();
+                if (showWhg) drawLines(hCells, gCells, W_hg);
+                if (showWgh) drawLines(hNoisyCells, gNoisyCells, W_gh_rows);
+            });
+        /* =========================================================
+        Build super-lattice hex grid (⎔)
+        =========================================================*/
+        /* build & attach once HEX */
+        const { svg: superSVG, cells: superCells } = buildSuperHexGrid(superSize);
+        $superGrid.appendChild(superSVG);
+        function buildSuperHexGrid(N) {
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("class", "hexSVG");
+            const hexH = (Math.sqrt(3) / 2) * hexSize;     // already defined globally
+            const width = (1.5 * N + 0.5) * hexSize;
+            const height = (N + 1.5) * hexH;
+            svg.setAttribute("width", width);
+            svg.setAttribute("height", height);
+            svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+            // canonical corner generator
+
+            const offX = hexSize, offY = hexH * 1.2;
+            const cells = [];
+
+            for (let q = 0; q < N; q++) {
+                for (let r = 0; r < N; r++) {
+                    const cx = (q + r / 2) * hexSize + offX;
+                    const cy = r * hexH + offY;
+                    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                    poly.setAttribute("points",
+                        hexCorners(q, r).map(p => `${p.x},${p.y}`).join(" ")
+                    );
+                    poly.setAttribute("fill", "#ffffff");
+                    poly.setAttribute("stroke", "#B2BEB5");
+                    poly.setAttribute("stroke-width", "1");
+                    poly.classList.add("superHex");
+                    poly.dataset.x = q;                 // keep ► (x,y) ⇢ (q,r)
+                    poly.dataset.y = r;
+                    svg.appendChild(poly);
+                    cells.push(poly);
+                }
+            }
+
+            /* click-to-set-coordinate */
+            svg.addEventListener("click", e => {
+                const t = e.target;
+                if (t.tagName === "polygon")
+                    setCoord(+t.dataset.x, +t.dataset.y);
+            });
+
+            return { svg, cells };
+        }
+        /* =========================================================
+        Draw one-cell-thick module overlays (rhombi)
+        =========================================================*/
+        // Helper function to offset a point
+        function offsetPoint(point, dx, dy) {
+            return {
+                x: point.x + dx,
+                y: point.y + dy
+            };
+        }
+
+        function hexCorners(q, r) {
+            return Array.from({ length: 6 }, (_, i) => axialCorner(q, r, i));
+        }
+        // helpers to turn (q,r) → pixel-corner, and to compare points
+        function axialToPixel(q, r) {
+            const hexH = Math.sqrt(3) / 2 * hexSize,
+                offX = hexSize, offY = hexH * 1.2;
+            return {
+                x: (q + r / 2) * hexSize + offX,
+                y: r * hexH + offY
+            };
+        }
+        function axialCorner(q, r, k) {
+            const { x: cX, y: cY } = axialToPixel(q, r),
+                a = (Math.PI / 180) * (60 * k - 30);
+            return {
+                x: cX + (hexSize / 2) * Math.cos(a),
+                y: cY + (hexSize / 2) * Math.sin(a)
+            };
+        }
+
+        function makeModuleOverlay(lambda, color, strokeWidth = 2, factor = 0.5) {
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "svg:path");
+
+            // Create arrays to hold the four edges of our rhombus
+            const topEdge = [];
+            const rightEdge = [];
+            const bottomEdge = [];
+            const leftEdge = [];
+            // === TOP EDGE (r=0) ===
+            for (let q = 0; q < lambda; q++) {
+                const corners = hexCorners(q, 0);
+                // Apply offsets to top edge points
+                const corner5 = offsetPoint(corners[5], factor * 0.0, -2 * factor); // Move up 2px
+                const corner0 = offsetPoint(corners[0], 1.5 * factor, -2 * factor); // Move up 2px
+                topEdge.push(corner5, corner0);
+            }
+
+            // === RIGHT EDGE (q=lambda-1) ===
+            for (let r = 0; r < lambda; r++) {
+                const corners = hexCorners(lambda - 1, r);
+                // Apply offsets to right edge points
+                const corner0 = offsetPoint(corners[0], factor * 2, factor * -1); // Move right 2px
+                const corner1 = offsetPoint(corners[1], factor * 2, factor * 0.7); // Move right 2px
+                rightEdge.push(corner0, corner1);
+            }
+
+            // === BOTTOM EDGE (r=lambda-1) ===
+            for (let q = lambda - 1; q >= 0; q--) {
+                const corners = hexCorners(q, lambda - 1);
+                // Apply offsets to bottom edge points
+                const corner2 = offsetPoint(corners[2], factor * 0, factor * 2.2); // Move down 2px
+                const corner3 = offsetPoint(corners[3], factor * -1, factor * 2.); // Move down 2px
+                bottomEdge.push(corner2, corner3);
+            }
+
+            // === LEFT EDGE (q=0) ===
+            for (let r = lambda - 1; r >= 0; r--) {
+                const corners = hexCorners(0, r);
+                // Apply offsets to left edge points
+                const corner3 = offsetPoint(corners[3], factor * -2, factor * 1); // Move left 2px
+                const corner4 = offsetPoint(corners[4], factor * -2.5, factor * -1); // Move left 2px
+                leftEdge.push(corner3, corner4);
+            }
+
+            // Combine all edges and remove duplicates
+            const allPoints = [...topEdge, ...rightEdge, ...bottomEdge, ...leftEdge];
+            const uniquePoints = [];
+            const seen = new Set();
+
+            for (let i = 0; i < allPoints.length; i++) {
+                const point = allPoints[i];
+                const key = `${point.x.toFixed(6)},${point.y.toFixed(6)}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniquePoints.push(point);
+                }
+            }
+
+            // Connect the points - they're already in order
+            if (uniquePoints.length > 0) {
+                // Start with first point
+                let pathData = `M${uniquePoints[0].x},${uniquePoints[0].y}`;
+
+                // Add lines to subsequent points
+                for (let i = 1; i < uniquePoints.length; i++) {
+                    pathData += ` L${uniquePoints[i].x},${uniquePoints[i].y}`;
+                }
+
+                // Close the path
+                pathData += " Z";
+                path.setAttribute("d", pathData);
+            }
+
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", color);
+            path.setAttribute("stroke-width", strokeWidth);
+            path.setAttribute("pointer-events", "none");
+
+            return path;
+        }
+        /* ----------- create overlays once and add them to the SVG ---------- */
+        periods.forEach((λ, i) => {
+            const overlay = makeModuleOverlay(λ, colours[i], 2, 0.4 + 0.5 * (i));
+            superSVG.appendChild(overlay);
+        });
+
+        /* resize the wrapper so the SVG is never clipped */
+        $superWrapper.style.width = superSVG.getAttribute("width") + "px";
+        $superWrapper.style.height = superSVG.getAttribute("height") + "px";
+
+        /* =========================================================
+           Build per-module visuals
+        =========================================================*/
+        const modules = [];
+        let gOffset = 0;
+        periods.forEach((λ, i) => {
+            const wrap = document.createElement("div");
+            wrap.className = "module";
+
+            const h = document.createElement("h3");
+            h.textContent = `Module λ = ${λ}`;
+            h.className = "moduleTitle";
+            h.style.color = colours[i];
+            wrap.appendChild(h);
+
+            const body = document.createElement("div");
+            body.className = "moduleBody";
+            wrap.appendChild(body);
+
+            const svg = makeHexGridSVG(λ, colours[i]);
+            body.appendChild(svg);
+
+            const oh = document.createElement("div");
+            oh.className = "oneHot";
+
+            modules.push({ λ, svg, oh, color: colours[i], offset: gOffset });
+            gOffset += λ * λ;
+            $mods.appendChild(wrap);
+        });
+        const gLen = gOffset,
+            gVec = document.getElementById("gVector"),
+            gLabelText = document.getElementById("gLabelText");
+
+        /* =========================================================
+           Section C DOM scaffolding
+        =========================================================*/
+        const noisySection = document.getElementById("noisySection");
+        const hNoisyWrap = document.createElement("div");
+        noisySection.appendChild(hNoisyWrap);
+        hNoisyWrap.id = "hNoisyWrap";
+        hNoisyWrap.innerHTML = '<h3 class="hLabel">Noisy hippocampal state h<sub>noisy</sub></h3><div class="hGrid"></div>';
+        const hNoisyGrid = hNoisyWrap.querySelector(".hGrid");
+
+        noisySection.insertAdjacentHTML("beforeend",
+            '<h3 class="gLabel">Noisy grid state g<sub>noisy</sub></h3><div class="gVector" id="gNoisyVec"></div><h3 class="gLabel">Winner-takes-all grid state g*</h3><div class="gVector" id="gCANVec"></div>');
+        const gNoisyVec = document.getElementById("gNoisyVec"),
+            gCANVec = document.getElementById("gCANVec");
+
+        const hRecWrap = document.createElement("div");
+        noisySection.appendChild(hRecWrap);
+        hRecWrap.id = "hRecWrap";
+        hRecWrap.innerHTML = '<h3 class="hLabel">Recovered hippocampal state h*</h3><div class="hGrid"></div>';
+        const hRecGrid = hRecWrap.querySelector(".hGrid");
+
+        /* create cell arrays */
+        const gCells = [], gNoisyCells = [], gCANCells = [];
+        periods.forEach((λ, i) => {
+            for (let j = 0; j < λ * λ; j++) {
+                const base = gridColor(i, 0);
+
+                const c = document.createElement("div");
+                c.className = "cell";
+                c.dataset.module = i;
+                c.style.background = base;
+                c.dataset.tip = '0';
+                gVec.appendChild(c);
+                gCells.push(c);
+
+                const cn = c.cloneNode(false);
+                cn.dataset.tip = '';
+                gNoisyVec.appendChild(cn);
+                gNoisyCells.push(cn);
+
+                const cc = c.cloneNode(false);
+                cc.dataset.tip = '0';
+                gCANVec.appendChild(cc);
+                gCANCells.push(cc);
+            }
+        });
+
+        /* =========================================================
+           Hippocampal layer dynamic variables
+        =========================================================*/
+        let nH = 64, hSide = 8;
+        let hCells = [], hNoisyCells = [], hRecCells = [];
+        const hWrap = document.getElementById("hWrap");
+        // hWrap.innerHTML='<h3 class="hLabel">Hippocampal state h</h3><div class="hGrid"></div>';
+        hWrap.innerHTML =
+            '<h3 class="hLabel">Hippocampal state <span id="hLabelText"></span></h3><div class="hGrid"></div>';
+        const hGrid = hWrap.querySelector(".hGrid");
+
+        /* =========================================================
+           Globals for connectivity
+        =========================================================*/
+        let theta = parseFloat($thetaIn.value),
+            W_hg = [], W_gh = [], W_gh_rows = [];
+
+        /* =========================================================
+           Build / rebuild hippocampal grids
+        =========================================================*/
+        function rebuildHippocampusLayer() {
+            hSide = Math.round(Math.sqrt(nH));
+            hGrid.innerHTML = hNoisyGrid.innerHTML = hRecGrid.innerHTML = "";
+            hCells.length = hNoisyCells.length = hRecCells.length = 0;
+
+            const colsRule = `repeat(${hSide},18px)`;
+            [hGrid, hNoisyGrid, hRecGrid].forEach(el => el.style.gridTemplateColumns = colsRule);
+
+            for (let i = 0; i < nH; i++) {
+                const c = document.createElement("div"),
+                    cn = c.cloneNode(false),
+                    cr = c.cloneNode(false);
+                c.className = cn.className = cr.className = "hcell";
+                c.dataset.tip = '0';
+                cn.dataset.tip = '';
+                cr.dataset.tip = '0';
+                hGrid.appendChild(c);
+                hNoisyGrid.appendChild(cn);
+                hRecGrid.appendChild(cr);
+                hCells.push(c);
+                hNoisyCells.push(cn);
+                hRecCells.push(cr);
+            }
+        }
+
+        /* =========================================================
+           Matrix viewers
+        =========================================================*/
+        function buildMatrixViewer() {
+            $matGrid.innerHTML = "";
+            $matGrid.style.gridTemplateColumns = `repeat(${gLen},12px)`;
+
+            let maxAbs = 0;
+            W_hg.forEach(row => row.forEach(c => { maxAbs = Math.max(maxAbs, Math.abs(wt(c))); }));
+            if (!maxAbs) maxAbs = 1;
+
+            for (let h = 0; h < nH; h++) {
+                for (let g = 0; g < gLen; g++) {
+                    const cell = document.createElement("div");
+                    cell.className = "mcell";
+
+                    const conn = W_hg[h].find(c => idx(c) === g);
+                    const raw = conn ? wt(conn) : 0;
+                    const value = conn ? wt(conn) / maxAbs : 0;
+
+                    if (value > 0) {
+                        cell.style.background = `rgba(229,57,53,${Math.abs(value).toFixed(3)})`;
+                    } else if (value < 0) {
+                        cell.style.background = `rgba(30,136,229,${Math.abs(value).toFixed(3)})`;
+                    } else { cell.style.background = "#e0e0e0"; }
+                    cell.dataset.tip = raw.toFixed(3);
+                    $matGrid.appendChild(cell);
+                }
+            }
+        }
+        function buildMatrixViewerWgh() {
+            $matGridWgh.innerHTML = "";
+            $matGridWgh.style.gridTemplateColumns = `repeat(${nH},12px)`;
+
+            let maxAbs = 0;
+            W_gh.forEach(row => row.forEach(v => { maxAbs = Math.max(maxAbs, Math.abs(v)); }));
+            if (!maxAbs) maxAbs = 1;
+
+            for (let g = 0; g < gLen; g++) {
+                for (let h = 0; h < nH; h++) {
+                    const cell = document.createElement("div");
+                    cell.className = "mcell";
+
+                    const v = W_gh[g].get(h) || 0;
+                    const value = v / maxAbs;
+
+                    if (value > 0) {
+                        cell.style.background = `rgba(229,57,53,${Math.abs(value).toFixed(3)})`;
+                    } else if (value < 0) {
+                        cell.style.background = `rgba(30,136,229,${Math.abs(value).toFixed(3)})`;
+                    } else { cell.style.background = "#e0e0e0"; }
+                    cell.dataset.tip = v.toFixed(3);
+                    $matGridWgh.appendChild(cell);
+                }
+            }
+        }
+
+        /* =========================================================
+           Random W_hg & Hebbian W_gh
+        =========================================================*/
+        function generateW() {
+            const frac = Math.min(1, Math.max(0, parseFloat($gammaIn.value) || 0));
+            W_hg = Array.from({ length: nH }, () => {
+                const row = [];
+                for (let g = 0; g < gLen; g++)
+                    if (Math.random() < frac) row.push({ g, w: randn_bm() });
+                return row;
+            });
+            buildWghHebbian();
+            buildMatrixViewer();
+            buildMatrixViewerWgh();
+            update();
+        }
+
+        /* ---------- Hebbian learner (Eq. 3) ---------- */
+        function buildWghHebbian() {
+            W_gh = Array.from({ length: gLen }, () => new Map());
+
+            for (let y = 0; y < superSize; y++)
+                for (let x = 0; x < superSize; x++) {
+                    const gActive = [];
+                    modules.forEach(({ λ, offset }) => gActive.push(offset + ((y % λ) * λ + (x % λ))));
+
+                    const hActs = Array(nH).fill(0);
+                    for (let h = 0; h < nH; h++) {
+                        let s = 0;
+                        W_hg[h].forEach(c => { if (gActive.includes(idx(c))) s += wt(c); });
+                        hActs[h] = Math.max(0, s - theta);
+                    }
+
+                    gActive.forEach(gIdx => {
+                        const map = W_gh[gIdx];
+                        hActs.forEach((hv, hIdx) => { if (hv > 0) map.set(hIdx, (map.get(hIdx) || 0) + hv); });
+                    });
+                }
+            const norm = superSize * superSize;
+            W_gh.forEach(m => m.forEach((v, k) => m.set(k, v / norm)));
+
+            W_gh_rows = Array.from({ length: nH }, () => []);
+            W_gh.forEach((map, gIdx) => map.forEach((w, hIdx) => W_gh_rows[hIdx].push({ g: gIdx, w })));
+        }
+        /* =========================================================
+           Section D - Spatial Firing Fields
+        =========================================================*/
+        /* Update the event listeners section */
+        // Initialize UI elements for Section D
+        const $moduleSelect = document.getElementById("moduleSelect");
+        const $gridCellSelect = document.getElementById("gridCellSelect");
+        const $hippoCellSelect = document.getElementById("hippoCellSelect");
+        const $computeGridFieldBtn = document.getElementById("computeGridFieldBtn");
+        const $computePlaceFieldBtn = document.getElementById("computePlaceFieldBtn");
+        const $gridCellField = document.getElementById("gridCellField");
+        const $hippoCellField = document.getElementById("hippoCellField");
+
+        // Original module selection code stays the same
+        $moduleSelect.addEventListener("change", function () {
+            const moduleIdx = parseInt(this.value);
+            const module = modules[moduleIdx];
+            $gridCellSelect.innerHTML = '';
+
+            for (let i = 0; i < module.λ * module.λ; i++) {
+                const option = document.createElement("option");
+                option.value = module.offset + i;
+                option.textContent = `Cell ${i} (${Math.floor(i / module.λ)},${i % module.λ})`;
+                $gridCellSelect.appendChild(option);
+            }
+        });
+
+        // Populate hippocampal cell dropdown
+        for (let i = 0; i < nH; i++) {
+            const option = document.createElement("option");
+            option.value = i;
+            option.textContent = `Cell ${i}`;
+            $hippoCellSelect.appendChild(option);
+        }
+
+        // Split into two separate button handlers
+        $computeGridFieldBtn.addEventListener("click", function () {
+            const selectedGridCell = parseInt($gridCellSelect.value);
+            const { gridCells } = initFieldMap($gridCellField, "grid");
+
+            // Compute activities for all positions
+            const gridActivities = Array(superSize * superSize).fill(0);
+
+            for (let x = 0; x < superSize; x++) {
+                for (let y = 0; y < superSize; y++) {
+                    // Compute which grid cells are active at this position
+                    const gActive = [];
+                    modules.forEach(({ λ, offset }) => {
+                        gActive.push(offset + ((y % λ) * λ + (x % λ)));
+                    });
+
+                    // Record grid cell activity (0 or 1)
+                    const posIdx = y * superSize + x;
+                    gridActivities[posIdx] = gActive.includes(selectedGridCell) ? 1 : 0;
+                }
+            }
+
+            // Visualize grid cell activity
+            gridCells.forEach((cell) => {
+                const x = parseInt(cell.dataset.x);
+                const y = parseInt(cell.dataset.y);
+                const posIdx = y * superSize + x;
+                const activity = gridActivities[posIdx];
+
+                if (activity > 0) {
+                    cell.setAttribute("fill", colours[modules.findIndex(m =>
+                        selectedGridCell >= m.offset &&
+                        selectedGridCell < m.offset + m.λ * m.λ)]);
+                } else {
+                    cell.setAttribute("fill", "#ffffff");
+                }
+            });
+        });
+
+        $computePlaceFieldBtn.addEventListener("click", function () {
+            const selectedHippoCell = parseInt($hippoCellSelect.value);
+            const { hippoCells } = initFieldMap($hippoCellField, "hippo");
+
+            // Store activities for all positions
+            const hippoActivities = Array(superSize * superSize).fill(0);
+
+            // Compute activities for all positions
+            for (let x = 0; x < superSize; x++) {
+                for (let y = 0; y < superSize; y++) {
+                    // Compute which grid cells are active at this position
+                    const gActive = [];
+                    modules.forEach(({ λ, offset }) => {
+                        gActive.push(offset + ((y % λ) * λ + (x % λ)));
+                    });
+
+                    // Compute hippocampal activity at this position
+                    let hValue = 0;
+                    W_hg[selectedHippoCell].forEach(c => {
+                        if (gActive.includes(idx(c))) hValue += wt(c);
+                    });
+                    hippoActivities[y * superSize + x] = Math.max(0, hValue - theta);
+                }
+            }
+
+            // Normalize hippocampal activities
+            const maxHippoActivity = Math.max(...hippoActivities, 1e-9);
+
+            // Visualize hippocampal cell activity
+            hippoCells.forEach((cell) => {
+                const x = parseInt(cell.dataset.x);
+                const y = parseInt(cell.dataset.y);
+                const posIdx = y * superSize + x;
+                const activity = hippoActivities[posIdx];
+
+                if (activity > 0) {
+                    const intensity = 0.3 + 0.7 * (activity / maxHippoActivity);
+                    cell.setAttribute("fill", `rgba(255,165,0,${intensity.toFixed(3)})`);
+                } else {
+                    cell.setAttribute("fill", "#ffffff");
+                }
+            });
+        });
+        // Helper function to initialize field map
+        function initFieldMap(container, type) {
+            // Create SVG clone for the heatmap
+            const fieldSVG = superSVG.cloneNode(true);
+
+            // Remove any path elements (the module overlays)
+            const overlays = fieldSVG.querySelectorAll("path");
+            overlays.forEach(path => path.remove());
+
+            // Remove the current position highlight from all cells
+            const hexCells = fieldSVG.querySelectorAll(".superHex[data-active='1']");
+            hexCells.forEach(cell => cell.removeAttribute("data-active"));
+
+            // Clear any existing content
+            container.innerHTML = '';
+            container.appendChild(fieldSVG);
+
+            if (type === "grid") {
+                return { gridCells: Array.from(fieldSVG.querySelectorAll(".superHex")) };
+            } else {
+                return { hippoCells: Array.from(fieldSVG.querySelectorAll(".superHex")) };
+            }
+        }
+
+        // Initialize the first module
+        $moduleSelect.dispatchEvent(new Event('change'));
+        /* =========================================================
+           Interaction handlers
+        =========================================================*/
+        $xIn.addEventListener("input", () => setCoord(+$xIn.value, +$yIn.value));
+        $yIn.addEventListener("input", () => setCoord(+$xIn.value, +$yIn.value));
+        document.getElementById("randBtn").addEventListener("click",
+            () => setCoord(Math.floor(Math.random() * superSize), Math.floor(Math.random() * superSize)));
+        $thetaIn.addEventListener("input", () => {
+            theta = Math.max(0, parseFloat($thetaIn.value) || 0);
+            generateW();
+        });
+        document.getElementById("regenBtn").addEventListener("click", generateW);
+        document.getElementById("noiseBtn").addEventListener("click", addNoiseAndRecover);
+        $hSel.addEventListener("change", () => {
+            nH = parseInt($hSel.value, 10);
+            rebuildHippocampusLayer();
+            generateW();
+
+            // Force refresh of connection visualization based on checkbox states
+            clearLines();
+            if (showWhg) drawLines(hCells, gCells, W_hg);
+            if (showWgh) drawLines(hNoisyCells, gNoisyCells, W_gh_rows);
+        });
+        /* =========================================================
+           Update cycle (clean pass only)
+        =========================================================*/
+        let current = { x: 0, y: 0 }, lastCleanHActs = [];
+        function setCoord(x, y) {
+            x = ((x % superSize) + superSize) % superSize;
+            y = ((y % superSize) + superSize) % superSize;
+            current = { x, y };
+            $xIn.value = x; $yIn.value = y;
+            update();
+        }
+        function clearLines() { while ($connSvg.firstChild) $connSvg.removeChild($connSvg.firstChild); }
+        function update() {
+            clearLines();
+            gLabelText.innerHTML = `g<sub>(${current.x},${current.y})</sub>`;
+            const hLabelText = document.getElementById("hLabelText");
+            if (hLabelText) {
+                hLabelText.innerHTML = `h<sub>(${current.x},${current.y})</sub>`;
+            }
+
+            //   superCells.forEach(c=>c.classList.remove("active"));
+            //   superCells[current.y*superSize+current.x].classList.add("active");
+            superCells.forEach(h => h.removeAttribute("data-active"));
+            superCells[current.y + current.x * superSize].setAttribute("data-active", "1");
+
+            const gActive = [];
+            modules.forEach(m => {
+                const { λ, svg, oh, color, offset } = m;
+                const q = current.x % λ, r = current.y % λ;
+                highlightHex(svg, λ, q, r, color);
+                // highlightOH(oh, λ, q, r, color);
+                const idx = offset + r * λ + q;
+                gActive.push(idx);
+            });
+
+            gCells.forEach((c, i) => {
+                const m = +c.dataset.module;
+                const val = gActive.includes(i) ? 1 : 0;
+                c.style.background = gridColor(m, val);
+                c.dataset.tip = val.toString();
+            });
+
+            const hActs = [];
+            for (let h = 0; h < nH; h++) {
+                let s = 0;
+                W_hg[h].forEach(c => { if (gActive.includes(idx(c))) s += wt(c); });
+                hActs.push(Math.max(0, s - theta));
+            }
+            lastCleanHActs = hActs;
+
+            const maxAct = Math.max(...hActs, 1e-9);
+            hCells.forEach((c, i) => {
+                const v = hActs[i];
+                c.style.background = v ? `rgba(255,165,0,${(0.3 + 0.6 * v / maxAct).toFixed(3)})` : "#d0d0d0";
+                c.dataset.tip = v.toFixed(3);
+            });
+
+            if (showWhg) drawLines(hCells, gCells, W_hg);
+            if (showWgh) drawLines(hNoisyCells, gNoisyCells, W_gh_rows);
+            clearPopulationVisuals();
+            addNoiseAndRecover();
+        }
+
+        /* =========================================================
+           Noise → invert → CAN → recover
+        =========================================================*/
+        function addNoiseAndRecover() {
+            const sigma = parseFloat($noiseIn.value) || 0;
+            if (!lastCleanHActs.length) return;
+
+            const noisyH = lastCleanHActs.map(v => v + randn_bm() * sigma);
+            const maxNoisy = Math.max(...noisyH.map(Math.abs), 1e-9);
+            hNoisyCells.forEach((c, i) => {
+                const v = noisyH[i];
+                if (v > 0) {
+                    // positive → orange
+                    c.style.background = `rgba(${hexToRGB(HPC_COLOR)}, ${(0.3 + 0.6 * v / maxNoisy).toFixed(3)})`;
+                } else if (v < 0) {
+                    // negative → turquoise
+                    const mag = Math.abs(v);
+                    c.style.background = `rgba(${hexToRGB(HPC_NEG_COLOR)}, ${(0.3 + 0.6 * mag / maxNoisy).toFixed(3)})`;
+                } else {
+                    c.style.background = "#d0d0d0";   // zero
+                }
+                c.dataset.tip = v.toFixed(3);
+            });
+
+            const gNoisy = Array(gLen).fill(0);
+            noisyH.forEach((v, hIdx) => {
+                if (v <= 0) return;
+                W_gh_rows[hIdx].forEach(conn => { gNoisy[conn.g] += v * conn.w; });
+            });
+
+            const modStats = modules.map(({ λ, offset }) => {
+                let mn = Infinity, mx = -Infinity;
+                for (let j = 0; j < λ * λ; j++) {
+                    const val = gNoisy[offset + j];
+                    if (val < mn) mn = val; if (val > mx) mx = val;
+                }
+                if (mn === mx) mx = mn + 1e-9;
+                return { min: mn, max: mx };
+            });
+
+            gNoisyCells.forEach((c, i) => {
+                const m = +c.dataset.module;
+                const { min, max } = modStats[m];
+                const raw = gNoisy[i];
+                const valCol = (raw - min) / (max - min);
+                c.style.background = gridColor(m, Math.max(0, Math.min(1, valCol)));
+                c.dataset.tip = raw.toFixed(3);
+            });
+
+            const gCAN = Array(gLen).fill(0);
+            modules.forEach(({ λ, offset }) => {
+                let best = -1, bv = -Infinity;
+                for (let j = 0; j < λ * λ; j++) {
+                    const idx = offset + j;
+                    if (gNoisy[idx] > bv) { bv = gNoisy[idx]; best = idx; }
+                }
+                if (best >= 0) gCAN[best] = 1;
+            });
+            gCANCells.forEach((c, i) => {
+                const m = +c.dataset.module;
+                const val = gCAN[i];
+                c.style.background = gridColor(m, val);
+                c.dataset.tip = val.toString();
+            });
+
+            const hRec = Array(nH).fill(0);
+            for (let h = 0; h < nH; h++) {
+                let s = 0;
+                W_hg[h].forEach(conn => { if (gCAN[idx(conn)]) s += wt(conn); });
+                hRec[h] = Math.max(0, s - theta);
+            }
+            const maxHR = Math.max(...hRec, 1e-9);
+            hRecCells.forEach((c, i) => {
+                const v = hRec[i];
+                c.style.background = v ? `rgba(${hexToRGB(HPC_COLOR)},${(0.3 + 0.6 * v / maxHR).toFixed(3)})` : "#d0d0d0";
+                c.dataset.tip = v.toFixed(3);
+            });
+
+            const perfect = hRec.every((v, i) => (v > 0) === (lastCleanHActs[i] > 0));
+            reconStatus.textContent = perfect ? "✅ Perfect reconstruction" : "❌ Imperfect reconstruction";
+
+            if (showWhg) drawLines(hCells, gCells, W_hg);
+            if (showWgh) drawLines(hNoisyCells, gNoisyCells, W_gh_rows);
+        }
+
+        function clearPopulationVisuals() {
+            gNoisyCells.forEach(c => {
+                const m = +c.dataset.module;
+                c.style.background = gridColor(m, 0);
+                c.dataset.tip = '';
+            });
+            gCANCells.forEach(c => {
+                const m = +c.dataset.module;
+                c.style.background = gridColor(m, 0);
+                c.dataset.tip = '0';
+            });
+            hNoisyCells.forEach(c => {
+                c.style.background = "#d0d0d0";
+                c.dataset.tip = '';
+            });
+            hRecCells.forEach(c => {
+                c.style.background = "#d0d0d0";
+                c.dataset.tip = '0';
+            });
+        }
+
+        /* =========================================================
+           Line-drawing helper - colour & opacity by weight
+        =========================================================*/
+        function drawLines(fromCells, toCells, weightRows) {
+            const sx = window.scrollX, sy = window.scrollY;
+
+            let maxAbs = 0;
+            weightRows.forEach(row => row.forEach(conn => { maxAbs = Math.max(maxAbs, Math.abs(wt(conn))); }));
+            if (!maxAbs) maxAbs = 1;
+
+            for (let h = 0; h < fromCells.length; h++) {
+                const hb = fromCells[h].getBoundingClientRect(),
+                    hx = hb.left + hb.width / 2 + sx,
+                    hy = hb.top + hb.height / 2 + sy;
+
+                weightRows[h].forEach(conn => {
+                    const g = idx(conn), w = wt(conn),
+                        gb = toCells[g].getBoundingClientRect(),
+                        gx = gb.left + gb.width / 2 + sx,
+                        gy = gb.top + gb.height / 2 + sy,
+                        line = document.createElementNS("http://www.w3.org/2000/svg", "line"),
+                        opacity = (0.15 + 0.85 * Math.abs(w) / maxAbs).toFixed(3);
+
+                    line.setAttribute("x1", hx); line.setAttribute("y1", hy);
+                    line.setAttribute("x2", gx); line.setAttribute("y2", gy);
+                    line.setAttribute("stroke", w >= 0 ? "#e53935" : "#1e88e5");
+                    line.setAttribute("stroke-width", "1");
+                    line.setAttribute("stroke-opacity", opacity);
+                    $connSvg.appendChild(line);
+                });
+            }
+        }
+
+        /* =========================================================
+           Misc helpers
+        =========================================================*/
+
+        function makeHexGridSVG(λ, color) {
+            const hexH = (Math.sqrt(3) / 2) * hexSize,
+                width = (1.5 * λ + 0.5) * hexSize,
+                height = (λ + 1.5) * hexH,
+                svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("class", "hexSVG");
+            svg.setAttribute("width", width);
+            svg.setAttribute("height", height);
+            svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+            svg.hexes = [];
+
+            const offX = hexSize, offY = hexH * 1.2;
+            for (let q = 0; q < λ; q++)
+                for (let r = 0; r < λ; r++) {
+                    const cx = (q + r / 2) * hexSize + offX,
+                        cy = r * hexH + offY,
+                        poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+                    //   poly.setAttribute("points",hexPoints(cx,cy,hexSize/2).join(" "));
+                    poly.setAttribute("points", hexPoints(q, r).join(" "));
+                    poly.setAttribute("fill", "#eff3fb");
+                    poly.setAttribute("stroke", "#b0c6e7");
+                    poly.setAttribute("stroke-width", "1");
+                    svg.appendChild(poly);
+                    svg.hexes.push(poly);
+                }
+            return svg;
+        }
+
+        function hexPoints(q, r) {
+            // returns ["x1,y1","x2,y2",…] by using your axialCorner
+            return Array.from({ length: 6 }, (_, i) => {
+                const pt = axialCorner(q, r, i);
+                // match the formatting you’ll use later for keys
+                return `${pt.x.toFixed(6)},${pt.y.toFixed(6)}`;
+            });
+        }
+        function highlightHex(svg, λ, q, r, color) {
+            svg.hexes.forEach(h => h.setAttribute("fill", "#eff3fb"));
+            svg.hexes[r + q * λ].setAttribute("fill", color);
+        }
+        function highlightOH(oh, λ, q, r, color) {
+            oh.childNodes.forEach(n => n.style.background = "#e0e0e0");
+            oh.childNodes[r * λ + q].style.background = color;
+        }
+
+        function gridColor(moduleIndex, value) {
+            const v = Math.max(0, Math.min(1, value));
+            const lightenFactor = ZERO_LIGHTEN * (1 - v);
+            return lighten(colours[moduleIndex], lightenFactor);
+        }
+        function lighten(hex, a) {
+            const c = parseInt(hex.slice(1), 16),
+                r = (c >> 16) + Math.round((255 - (c >> 16)) * a),
+                g = ((c >> 8) & 255) + Math.round((255 - ((c >> 8) & 255)) * a),
+                b = (c & 255) + Math.round((255 - (c & 255)) * a);
+            return `rgb(${r},${g},${b})`;
+        }
+        function randn_bm() {
+            let u = 0, v = 0;
+            while (u === 0) u = Math.random();
+            while (v === 0) v = Math.random();
+            return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        }
+        function hexToRGB(hex) {
+            const c = parseInt(hex.slice(1), 16);
+            return `${(c >> 16) & 255},${(c >> 8) & 255},${c & 255}`;
+        }
+        function idx(c) { return typeof c === "number" ? c : c.g; }
+        function wt(c) { return typeof c === "number" ? 1 : c.w; }
+
+        /* =========================================================
+           Init
+        =========================================================*/
+        rebuildHippocampusLayer();
+        generateW();
+        setCoord(0, 0);
+        window.addEventListener("resize", update);
+    </script>
+</body>
+
+</html>
