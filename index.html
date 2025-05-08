@@ -1227,28 +1227,53 @@
         /* =========================================================
            Line-drawing helper - colour & opacity by weight
         =========================================================*/
+        // Update the SVG position and size to match document dimensions
+        function updateSvgDimensions() {
+            const docHeight = Math.max(
+                document.body.scrollHeight,
+                document.body.offsetHeight,
+                document.documentElement.clientHeight,
+                document.documentElement.scrollHeight,
+                document.documentElement.offsetHeight
+            );
+
+            $connSvg.style.position = 'absolute';
+            $connSvg.style.top = '0';
+            $connSvg.style.left = '0';
+            $connSvg.style.width = '100%';
+            $connSvg.style.height = docHeight + 'px';
+            $connSvg.setAttribute('width', '100%');
+            $connSvg.setAttribute('height', docHeight);
+        }
+
+        // Enhance the drawLines function to better handle positions
         function drawLines(fromCells, toCells, weightRows) {
             const sx = window.scrollX, sy = window.scrollY;
+            updateSvgDimensions();
 
             let maxAbs = 0;
             weightRows.forEach(row => row.forEach(conn => { maxAbs = Math.max(maxAbs, Math.abs(wt(conn))); }));
             if (!maxAbs) maxAbs = 1;
 
             for (let h = 0; h < fromCells.length; h++) {
-                const hb = fromCells[h].getBoundingClientRect(),
-                    hx = hb.left + hb.width / 2 + sx,
-                    hy = hb.top + hb.height / 2 + sy;
+                const hb = fromCells[h].getBoundingClientRect();
+                // Use the absolute position relative to the document
+                const hx = hb.left + hb.width / 2 + sx;
+                const hy = hb.top + hb.height / 2 + sy;
 
                 weightRows[h].forEach(conn => {
-                    const g = idx(conn), w = wt(conn),
-                        gb = toCells[g].getBoundingClientRect(),
-                        gx = gb.left + gb.width / 2 + sx,
-                        gy = gb.top + gb.height / 2 + sy,
-                        line = document.createElementNS("http://www.w3.org/2000/svg", "line"),
-                        opacity = (0.15 + 0.85 * Math.abs(w) / maxAbs).toFixed(3);
+                    const g = idx(conn), w = wt(conn);
+                    const gb = toCells[g].getBoundingClientRect();
+                    const gx = gb.left + gb.width / 2 + sx;
+                    const gy = gb.top + gb.height / 2 + sy;
 
-                    line.setAttribute("x1", hx); line.setAttribute("y1", hy);
-                    line.setAttribute("x2", gx); line.setAttribute("y2", gy);
+                    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    const opacity = (0.15 + 0.85 * Math.abs(w) / maxAbs).toFixed(3);
+
+                    line.setAttribute("x1", hx);
+                    line.setAttribute("y1", hy);
+                    line.setAttribute("x2", gx);
+                    line.setAttribute("y2", gy);
                     line.setAttribute("stroke", w >= 0 ? "#e53935" : "#1e88e5");
                     line.setAttribute("stroke-width", "1");
                     line.setAttribute("stroke-opacity", opacity);
@@ -1257,6 +1282,17 @@
             }
         }
 
+        // Add a scroll event listener
+        window.addEventListener("scroll", function () {
+            if (showWhg || showWgh) {
+                clearLines();
+                if (showWhg) drawLines(hCells, gCells, W_hg);
+                if (showWgh) drawLines(hNoisyCells, gNoisyCells, W_gh_rows);
+            }
+        });
+
+        // Call updateSvgDimensions on init
+        updateSvgDimensions();
         /* =========================================================
            Misc helpers
         =========================================================*/
